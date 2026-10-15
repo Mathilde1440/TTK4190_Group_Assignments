@@ -56,15 +56,22 @@ Yrdot =  9.3677e5;
 Nvdot =  Yrdot;
 Nrdot = -2.4283e10;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 % Add added mass here
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ur = nu(1);
+v_r = nu(2);
+r = nu(3);
 
+M_A = -[ Xudot  0      0;
+        0      Yvdot  Yrdot;
+        0       Yrdot Nrdot;
+    ];
+%%
 % rigid-body mass matrix
 MRB = [ m 0    0 
         0 m    m*xg
         0 m*xg Iz ];
-Minv = invQR(MRB);
+Minv = invQR(MRB+M_A);
 
 % input matrix
 t_thr = 0.05;           % thrust deduction number
@@ -80,17 +87,57 @@ CRB = m * nu(3) * [ 0 -1 -xg
                     1  0  0 
                     xg 0  0  ];
                 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 % Add Coriolis due to added mass here
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+C_A = [ 0                     0        Yvdot*v_r + Yrdot*r;
+        0                     0        -Xudot*ur;
+        -Yvdot*v_r - Yrdot*r  Xudot*ur    0
+    ];
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+C = C_A + CRB;
+%%
 % Add linear damping here
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+T1 = 20;
+T2 = 20;
+T6 = 10;
+X_u = -(m - Xudot)/T1;
+Y_u = -(m -Yvdot)/T2;
+Y_r = 0;
+N_u = 0;
+N_r = -(Iz-Nrdot)/T6;
+D = [X_u 0    0; 
+      0   Y_u, Y_r;
+      0   N_u  N_r;];
+%%
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%
 % Add nonlinear damping here
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+k = 0.1;
+C_R = 0;
+epsilon = 0.001;
+
+nu_1 = 10^(-6);
+R_n = L/nu_1 *abs(ur);
+CF = (log10(R_n)-2)^2 + epsilon;
+Cf = 0.075/ CF + C_R;
+
+S = 2*T*B + 2*T*L + L*B;
+X = -1/2 * rho * S *(1+k)* Cf*abs(ur)*ur;
+
+Cd_2D = Hoerner(B,T);
+Ycf = 0;
+Ncf = 0;
+
+dx = L/10; % 10 strips
+for xL = -L/2:dx:L/2
+    Ucf = abs(v_r + xL * r) * (v_r + xL * r);
+    Ycf = Ycf - 0.5 * rho * T * Cd_2D * Ucf * dx; % sway force
+    Ncf = Ncf - 0.5 * rho * T * Cd_2D * xL * Ucf * dx; % yaw moment
+end
+
+Tau_RB = D*nu + [X,Ycf, Ncf]';
+%%
 
 R = Rzyx(0,0,eta(3));
 
@@ -99,8 +146,8 @@ thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
 
 % ship dynamics
 u = [ thr delta ]';
-tau = Bi * u;
-nu_dot = Minv * (tau - CRB * nu); 
+tau = Bi * u + Tau_RB*0;
+nu_dot = Minv * (tau - C * nu); 
 eta_dot = R * nu;    
 
 % Rudder saturation and dynamics (Sections 9.5.2)

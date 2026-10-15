@@ -1,7 +1,7 @@
 % Project in TTK4190 Guidance, Navigation and Control of Vehicles 
 %
-% Author:           My name
-% Study program:    My study program
+% Author:           Mathilde,Odin
+% Study program:    Cybernetics and robotics
 
 % Add folder for 3-D visualization files
 addpath(genpath('flypath3d_v3'))
@@ -10,7 +10,7 @@ addpath(genpath('flypath3d_v3'))
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clc; clear; close all;
-T_final = 1000;	        % Final simulation time (s)
+T_final = 500;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
 psi_ref = 10 * pi/180;  % desired yaw angle (rad)
@@ -39,8 +39,28 @@ for i = 1:nTimeSteps
     u_d = u_ref;
         
     % control law
-    delta_c = 0.1;              % rudder angle command (rad)
-    n_c = 10;                   % propeller speed (rps)
+    input_num = 1;
+    step_start = 200; 
+    t_n = t(i);
+    switch input_num
+        case 1
+            delta_c = 0.1;              % rudder angle command (rad)
+            n_c = 10;                   % propeller speed (rps)
+
+        case 2                          % time-varying input, step change in rudder
+            delta_c = 0.1;             
+            n_c = 10;
+            if t_n > step_start
+                delta_c = 0.3;
+            end
+
+        case 3                          % time-varying input, step cahnge in propeller
+            delta_c = 0.1;             
+            n_c = 10;
+            if t_n > step_start
+                n_c = 15;
+            end
+    end
     
     % ship dynamics
     u = [delta_c n_c]';
