@@ -39,7 +39,7 @@ for i = 1:nTimeSteps
     u_d = u_ref;
         
     % control law
-    input_num = 1;
+    input_num = 2;
     step_start = 200; 
     t_n = t(i);
     switch input_num

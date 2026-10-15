@@ -146,7 +146,7 @@ thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
 
 % ship dynamics
 u = [ thr delta ]';
-tau = Bi * u + Tau_RB*0;
+tau = Bi * u + Tau_RB;
 nu_dot = Minv * (tau - C * nu); 
 eta_dot = R * nu;    
 
