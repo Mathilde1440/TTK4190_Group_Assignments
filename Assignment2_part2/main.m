@@ -14,7 +14,7 @@ T_final = 1000;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
 psi_ref = 10 * pi/180;  % desired yaw angle (rad)
-U_ref   = 7;            % desired surge speed (m/s)
+U_ref   = 9;            % desired surge speed (m/s)
 
 Vc = 1;                 % current speed (m/s)
 beta_Vc = 45*pi/180;    % current direction (rad)
@@ -48,10 +48,13 @@ nTimeSteps = length(t);         % Number of time steps
 
 simdata = zeros(nTimeSteps, 13); % Pre-allocate matrix for efficiency
 
+
 for i = 1:nTimeSteps
     if t(i) >= 500
         psi_ref = -20 * pi/180;
     end
+
+     t_n = t(i);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Part 2, 1a) Add current here 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -130,7 +133,8 @@ for i = 1:nTimeSteps
     % The result should look like this:
     % n_c = open_loop_speed_control(U_ref);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    n_c = 10;                   % propeller speed [radians per second (rps)]
+    % n_c = 10;                   % propeller speed [radians per second (rps)]
+    n_c = open_loop_speed_control(U_ref);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     % Part 2, 3f) Replace the open loop speed controller, 
