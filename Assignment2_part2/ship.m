@@ -69,6 +69,17 @@ rho = 1025;             % density of water (m/s^3)
 % KT = ...;
 % KQ = ...;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Ja = 0;
+% P_D = 1.5;
+% AE_AO = 0.65;
+% Z = 4;
+% [KT,KQ] = wageningen(Ja, P_D, AE_AO, Z);
+K_T = 0.6367;
+K_Q = 0.1390;
+
+% disp('KT and KQ:')
+% KT
+% KQ
 
 % rudder limitations
 delta_max  = 40 * pi/180;        % max rudder angle      (rad)
@@ -151,7 +162,8 @@ d = -[Xns Ycf Ncf]';
 % thr = ....
 % Q = ....
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-thr = rho * Dia^4 * KT * abs(n) * n;    % thrust command (N)
+thr = rho * Dia^4 * K_T * abs(n) * n;    % thrust command (N)
+Q   = rho * Dia^5   * K_Q * abs(n) * n;
 
 % ship dynamics
 R = Rzyx(0,0,eta(3));
@@ -179,7 +191,19 @@ end
 % the result should look like this:
 % n_dot =  .... (computed as function of torque)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-n_dot = (1/10) * (n_c - n);
+Im = 100000;
+Tm = 10; 
+h1 = 0.1;      %same as main
+persistent Qm  %set inital value for qm and keep it persistent
+if isempty(Qm)
+    Qm = 0;
+end
+
+Qd = rho * Dia^5   * K_Q * abs(n_c) * n_c;
+Qm_dot = 1/Tm * (Qd-Qm);
+Qm = euler2(Qm_dot, Qm, h1);
+
+n_dot = 1/(Im)*(Qm-Q);
 
 xdot = [nu_dot' eta_dot' delta_dot n_dot]';
 y = tau_total;
