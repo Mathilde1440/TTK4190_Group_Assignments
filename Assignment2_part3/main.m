@@ -10,7 +10,7 @@ addpath(genpath('flypath3d_v3'))
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clc; clear; close all;
-T_final = 1000;	        % Final simulation time (s)
+T_final = 8000;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
 psi_ref = 10 * pi/180;  % desired yaw angle (rad)
@@ -55,18 +55,15 @@ for i = 1:nTimeSteps
     end
 
      t_n = t(i);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 1a) Add current here 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % -----Current ----------
     psi = x(6);
 
     uc = Vc*cos(beta_Vc - psi);
     vc = Vc*sin(beta_Vc - psi);
     nu_c = [ uc vc 0 ]';
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 1c) Add wind here 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % --------Wind------------- 
     if t(i) >= 200
         u_ship = x(1);
         v_ship = x(2);
@@ -89,17 +86,16 @@ for i = 1:nTimeSteps
     end
 
     tau_wind = [0; Ywind; Nwind];
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 2d) Add a reference model here 
-    % Define it as a function
-    % check eq. (15.143) in (Fossen, 2021) for help
-    %
-    % The result should look like this:
-    % xd_dot = ref_model(xd,psi_ref(i));
-    % psi_d = xd(1);
-    % r_d = xd(2);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    %----- Guidance law -----------  
+
+    [xk1,yk1,xk,yk,last] = WP_selector(x(4),x(5));
+    [e_y,pi_h] = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
+    chi_d = LOS_guidance(e_y,pi_h);
+    psi_ref = chi_d;
+
+    % -----Reference model--------  
+
     % psi_d = psi_ref;
     % r_d = 0;
     % u_d = U_ref;
@@ -111,13 +107,9 @@ for i = 1:nTimeSteps
     xd = xd + h*xd_dot;
     u_d = U_ref;
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 2d) Add the heading controller here 
-    % Define it as a function
-    %
-    % The result should look like this:
-    % delta_c = PID_heading(e_psi,e_r,e_int);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % --------Heading controller ----------- 
+
     %delta_c = 0.1;              % rudder angle command (rad)
     e_psi = psi_d - psi;
     e_r = r_d - x(3);
@@ -126,24 +118,15 @@ for i = 1:nTimeSteps
 
     e_int = e_int + h*e_psi;
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 3e) Add open loop speed control here
-    % Define it as a function
-    %
-    % The result should look like this:
-    % n_c = open_loop_speed_control(U_ref);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    %--------open loop speed control----------                     
     % n_c = 10;                   % propeller speed [radians per second (rps)]
     n_c = open_loop_speed_control(U_ref);
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 3f) Replace the open loop speed controller, 
-    % with a closed loop speed controller here 
-    % Define it as a function
-    %
-    % The result should look like this:
-    % n_c = closed_loop_speed_control(u_d,e_u,e_int_u);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % Closed loop speed controller
+
+
     
     % ship dynamics
     u = [delta_c n_c]';
@@ -276,3 +259,6 @@ xlabel('Time (s)')
 ylabel('Heading angle (deg)')
 legend('Actual heading', 'Desired heading')
 title('Heading Control')
+
+figure 
+pathplotter(x,y)

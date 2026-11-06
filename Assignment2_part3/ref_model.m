@@ -1,6 +1,6 @@
 function xd_dot = ref_model(xd, psi_ref)
 
-    omega_ref = 0.03;
+    omega_ref = 0.09;
     zeta = 1;
 
     psi_d = xd(1);
