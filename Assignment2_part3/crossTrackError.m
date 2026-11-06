@@ -1,4 +1,4 @@
-function [pi_h, y_ep] = crossTrackError(xk1,xk,yk1,yk, x_pos,y_pos)
+function [pi_h, y_ep] = crossTrackError(xk1,yk1,xk,yk, x_pos,y_pos)
 
 delta_y = yk1-yk;
 delta_x = xk1-xk;

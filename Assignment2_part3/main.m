@@ -13,7 +13,7 @@ clc; clear; close all;
 T_final = 8000;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
-psi_ref = 10 * pi/180;  % desired yaw angle (rad)
+psi_ref =-110 * pi/180;  % desired yaw angle (rad)
 U_ref   = 9;            % desired surge speed (m/s)
 
 Vc = 1;                 % current speed (m/s)
@@ -31,14 +31,20 @@ L_oa = 161;
 A_Lw = 10*L_oa;
 
 % initial states
-eta_0 = [0 0 0]';
+eta_0 = [0 0 deg2rad(-110)]';
 nu_0  = [0 0 0]';
 delta_0 = 0;
 n_0 = 0;
 x = [nu_0' eta_0' delta_0 n_0]'; % The state vector can be extended with addional states here
 
-xd =[0,0,0];
+xd =[0 0 0]';
 e_int = 0;
+
+last       = 0;
+xk         = 0;
+yk         = 0;
+xk1        = 0;
+yk1        = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -50,9 +56,9 @@ simdata = zeros(nTimeSteps, 13); % Pre-allocate matrix for efficiency
 
 
 for i = 1:nTimeSteps
-    if t(i) >= 500
-        psi_ref = -20 * pi/180;
-    end
+    % if t(i) >= 500
+    %     psi_ref = -20 * pi/180;
+    % end
 
      t_n = t(i);
 
@@ -90,8 +96,8 @@ for i = 1:nTimeSteps
     %----- Guidance law -----------  
 
     [xk1,yk1,xk,yk,last] = WP_selector(x(4),x(5));
-    [e_y,pi_h] = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
-    chi_d = LOS_guidance(e_y,pi_h);
+    [pi_h, y_ep]  = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
+    chi_d = LOS_guidance(pi_h, y_ep);
     psi_ref = chi_d;
 
     % -----Reference model--------  
@@ -114,7 +120,8 @@ for i = 1:nTimeSteps
     e_psi = psi_d - psi;
     e_r = r_d - x(3);
     
-    delta_c = PID_heading(e_psi,e_r,e_int);
+    %delta_c = PID_heading(e_psi,e_r,e_int);
+    delta_c = PD_heading(e_psi,e_r);
 
     e_int = e_int + h*e_psi;
 
@@ -123,10 +130,7 @@ for i = 1:nTimeSteps
     % n_c = 10;                   % propeller speed [radians per second (rps)]
     n_c = open_loop_speed_control(U_ref);
 
-
     % Closed loop speed controller
-
-
     
     % ship dynamics
     u = [delta_c n_c]';
@@ -204,25 +208,25 @@ legend('actual rudder angle','commanded rudder angle')
 %% Create objects for 3-D visualization 
 % Since we only simulate 3-DOF we need to construct zero arrays for the 
 % excluded dimensions, including height, roll and pitch
-z = zeros(length(x),1);
-phi = zeros(length(psi),1);
-theta = zeros(length(psi),1);
-
-% create object 1: ship (ship1.mat)
-new_object('flypath3d_v3/ship1.mat',[x,y,z,phi,theta,psi],...
-'model','royalNavy2.mat','scale',(max(max(abs(x)),max(abs(y)))/1000),...
-'edge',[0 0 0],'face',[0 0 0],'alpha',1,...
-'path','on','pathcolor',[.89 .0 .27],'pathwidth',2);
-
-% Plot trajectories 
-flypath('flypath3d_v3/ship1.mat',...
-'animate','on','step',500,...
-'axis','on','axiscolor',[0 0 0],'color',[1 1 1],...
-'font','Georgia','fontsize',12,...
-'view',[-25 35],'window',[900 900],...
-'xlim', [min(y)-0.1*max(abs(y)),max(y)+0.1*max(abs(y))],... 
-'ylim', [min(x)-0.1*max(abs(x)),max(x)+0.1*max(abs(x))], ...
-'zlim', [-max(max(abs(x)),max(abs(y)))/100,max(max(abs(x)),max(abs(y)))/20]); 
+% z = zeros(length(x),1);
+% phi = zeros(length(psi),1);
+% theta = zeros(length(psi),1);
+% 
+% % create object 1: ship (ship1.mat)
+% new_object('flypath3d_v3/ship1.mat',[x,y,z,phi,theta,psi],...
+% 'model','royalNavy2.mat','scale',(max(max(abs(x)),max(abs(y)))/1000),...
+% 'edge',[0 0 0],'face',[0 0 0],'alpha',1,...
+% 'path','on','pathcolor',[.89 .0 .27],'pathwidth',2);
+% 
+% % Plot trajectories 
+% flypath('flypath3d_v3/ship1.mat',...
+% 'animate','on','step',500,...
+% 'axis','on','axiscolor',[0 0 0],'color',[1 1 1],...
+% 'font','Georgia','fontsize',12,...
+% 'view',[-25 35],'window',[900 900],...
+% 'xlim', [min(y)-0.1*max(abs(y)),max(y)+0.1*max(abs(y))],... 
+% 'ylim', [min(x)-0.1*max(abs(x)),max(x)+0.1*max(abs(x))], ...
+% 'zlim', [-max(max(abs(x)),max(abs(y)))/100,max(max(abs(x)),max(abs(y)))/20]); 
 
 
 %% Problem 1b
