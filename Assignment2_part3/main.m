@@ -9,8 +9,8 @@ addpath(genpath('flypath3d_v3'))
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-clc; clear; close all;
-T_final = 8000;	        % Final simulation time (s)
+clc; clear; close all;clear functions;
+T_final = 6300;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
 psi_ref =-110 * pi/180;  % desired yaw angle (rad)
@@ -46,6 +46,7 @@ yk         = 0;
 xk1        = 0;
 yk1        = 0;
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -53,7 +54,7 @@ t = 0:h:T_final;                % Time vector
 nTimeSteps = length(t);         % Number of time steps
 
 simdata = zeros(nTimeSteps, 13); % Pre-allocate matrix for efficiency
-
+chi_d_vect = zeros(nTimeSteps,1);
 
 for i = 1:nTimeSteps
     % if t(i) >= 500
@@ -61,6 +62,11 @@ for i = 1:nTimeSteps
     % end
 
      t_n = t(i);
+
+    %-----No current---------
+    % uc = 0;
+    % vc = 0;
+    % nu_c = [ uc vc 0 ]';
 
     % -----Current ----------
     psi = x(6);
@@ -93,12 +99,20 @@ for i = 1:nTimeSteps
 
     tau_wind = [0; Ywind; Nwind];
 
-    %----- Guidance law -----------  
+    %----- Guidance law ----------- 
 
     [xk1,yk1,xk,yk,last] = WP_selector(x(4),x(5));
     [pi_h, y_ep]  = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
-    chi_d = LOS_guidance(pi_h, y_ep);
+    % chi_d = LOS_guidance(pi_h, y_ep);
+    chi_d = ILOS_guidance(pi_h, y_ep,h);
     psi_ref = chi_d;
+
+    %crab angle compansation
+    % beta_c_i = atan2(x(2), x(1));
+    % psi_ref = psi_ref-beta_c_i;
+
+
+    chi_d_vect(i) = rad2deg(chi_d);
 
     % -----Reference model--------  
 
@@ -264,5 +278,19 @@ ylabel('Heading angle (deg)')
 legend('Actual heading', 'Desired heading')
 title('Heading Control')
 
-figure 
+%% heading plot
+chi = psi + atan2(v, u);
+
+figure
+plot(t, rad2deg(chi), 'LineWidth', 1.5)
+hold on
+plot(t, chi_d_vect, '--', 'LineWidth', 1.5)
+
+grid on
+xlabel('Time (s)')
+ylabel('Course (deg)')
+legend('Actual course', 'Desired course')
+title('Course')
+
+% figure 
 pathplotter(x,y)

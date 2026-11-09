@@ -1,3 +1,4 @@
+
 function [xk1,yk1,xk,yk,last] = WP_selector(x_pos,y_pos)
     last = false;
     
@@ -12,8 +13,7 @@ function [xk1,yk1,xk,yk,last] = WP_selector(x_pos,y_pos)
     end
     
     L_pp = 161;
-    look_ahead = 1.5*L_pp;
-    R_acceptance = look_ahead;
+    R_acceptance = 2.5*L_pp;
 
 
     next_waypoint_coordinates = waypoints(:,current_WP_index +1);
@@ -21,9 +21,7 @@ function [xk1,yk1,xk,yk,last] = WP_selector(x_pos,y_pos)
     dx = x_pos-next_waypoint_coordinates(1);
     dy = y_pos-next_waypoint_coordinates(2);
     R = (dx)^2 + (dy)^2;
-    
-    
-    
+   
     if R <= R_acceptance^2
         
         if current_WP_index < size(waypoints,2)-1
