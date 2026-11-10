@@ -18,6 +18,6 @@ function chi_d = ILOS_guidance(pi_h, y_ep, h)
     y_int_dot = (look_ahead*y_ep) / (look_ahead^2 + (y_ep + kappa*y_int)^2);
     y_int = y_int + y_int_dot*h;
 
-    % y_int
+     %y_int
 
 end
