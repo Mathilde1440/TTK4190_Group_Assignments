@@ -9,11 +9,11 @@ addpath(genpath('flypath3d_v3'))
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % USER INPUTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-clc; clear; close all;
-T_final = 1000;	        % Final simulation time (s)
+clc; clear; close all;clear functions;
+T_final = 6300;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
-psi_ref = 10 * pi/180;  % desired yaw angle (rad)
+psi_ref =-110 * pi/180;  % desired yaw angle (rad)
 U_ref   = 9;            % desired surge speed (m/s)
 
 Vc = 1;                 % current speed (m/s)
@@ -31,14 +31,21 @@ L_oa = 161;
 A_Lw = 10*L_oa;
 
 % initial states
-eta_0 = [0 0 0]';
+eta_0 = [0 0 deg2rad(-110)]';
 nu_0  = [0 0 0]';
 delta_0 = 0;
 n_0 = 0;
 x = [nu_0' eta_0' delta_0 n_0]'; % The state vector can be extended with addional states here
 
-xd =[0,0,0];
+xd =[0 0 0]';
 e_int = 0;
+
+last       = 0;
+xk         = 0;
+yk         = 0;
+xk1        = 0;
+yk1        = 0;
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
@@ -47,26 +54,28 @@ t = 0:h:T_final;                % Time vector
 nTimeSteps = length(t);         % Number of time steps
 
 simdata = zeros(nTimeSteps, 13); % Pre-allocate matrix for efficiency
-
+chi_d_vect = zeros(nTimeSteps,1);
 
 for i = 1:nTimeSteps
-    if t(i) >= 500
-        psi_ref = -20 * pi/180;
-    end
+    % if t(i) >= 500
+    %     psi_ref = -20 * pi/180;
+    % end
 
      t_n = t(i);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 1a) Add current here 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    %-----No current---------
+    % uc = 0;
+    % vc = 0;
+    % nu_c = [ uc vc 0 ]';
+
+    % -----Current ----------
     psi = x(6);
 
     uc = Vc*cos(beta_Vc - psi);
     vc = Vc*sin(beta_Vc - psi);
     nu_c = [ uc vc 0 ]';
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 1c) Add wind here 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % --------Wind------------- 
     if t(i) >= 200
         u_ship = x(1);
         v_ship = x(2);
@@ -89,17 +98,24 @@ for i = 1:nTimeSteps
     end
 
     tau_wind = [0; Ywind; Nwind];
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 2d) Add a reference model here 
-    % Define it as a function
-    % check eq. (15.143) in (Fossen, 2021) for help
-    %
-    % The result should look like this:
-    % xd_dot = ref_model(xd,psi_ref(i));
-    % psi_d = xd(1);
-    % r_d = xd(2);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    %----- Guidance law ----------- 
+
+    [xk1,yk1,xk,yk,last] = WP_selector(x(4),x(5));
+    [pi_h, y_ep]  = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
+    % chi_d = LOS_guidance(pi_h, y_ep);
+    chi_d = ILOS_guidance(pi_h, y_ep,h);
+    psi_ref = chi_d;
+
+    %crab angle compansation
+    % beta_c_i = atan2(x(2), x(1));
+    % psi_ref = psi_ref-beta_c_i;
+
+
+    chi_d_vect(i) = rad2deg(chi_d);
+
+    % -----Reference model--------  
+
     % psi_d = psi_ref;
     % r_d = 0;
     % u_d = U_ref;
@@ -111,39 +127,24 @@ for i = 1:nTimeSteps
     xd = xd + h*xd_dot;
     u_d = U_ref;
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 2d) Add the heading controller here 
-    % Define it as a function
-    %
-    % The result should look like this:
-    % delta_c = PID_heading(e_psi,e_r,e_int);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    % --------Heading controller ----------- 
+
     %delta_c = 0.1;              % rudder angle command (rad)
     e_psi = psi_d - psi;
     e_r = r_d - x(3);
     
-    delta_c = PID_heading(e_psi,e_r,e_int);
+    %delta_c = PID_heading(e_psi,e_r,e_int);
+    delta_c = PD_heading(e_psi,e_r);
 
     e_int = e_int + h*e_psi;
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 3e) Add open loop speed control here
-    % Define it as a function
-    %
-    % The result should look like this:
-    % n_c = open_loop_speed_control(U_ref);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    %--------open loop speed control----------                     
     % n_c = 10;                   % propeller speed [radians per second (rps)]
     n_c = open_loop_speed_control(U_ref);
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Part 2, 3f) Replace the open loop speed controller, 
-    % with a closed loop speed controller here 
-    % Define it as a function
-    %
-    % The result should look like this:
-    % n_c = closed_loop_speed_control(u_d,e_u,e_int_u);
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Closed loop speed controller
     
     % ship dynamics
     u = [delta_c n_c]';
@@ -221,25 +222,25 @@ legend('actual rudder angle','commanded rudder angle')
 %% Create objects for 3-D visualization 
 % Since we only simulate 3-DOF we need to construct zero arrays for the 
 % excluded dimensions, including height, roll and pitch
-z = zeros(length(x),1);
-phi = zeros(length(psi),1);
-theta = zeros(length(psi),1);
-
-% create object 1: ship (ship1.mat)
-new_object('flypath3d_v3/ship1.mat',[x,y,z,phi,theta,psi],...
-'model','royalNavy2.mat','scale',(max(max(abs(x)),max(abs(y)))/1000),...
-'edge',[0 0 0],'face',[0 0 0],'alpha',1,...
-'path','on','pathcolor',[.89 .0 .27],'pathwidth',2);
-
-% Plot trajectories 
-flypath('flypath3d_v3/ship1.mat',...
-'animate','on','step',500,...
-'axis','on','axiscolor',[0 0 0],'color',[1 1 1],...
-'font','Georgia','fontsize',12,...
-'view',[-25 35],'window',[900 900],...
-'xlim', [min(y)-0.1*max(abs(y)),max(y)+0.1*max(abs(y))],... 
-'ylim', [min(x)-0.1*max(abs(x)),max(x)+0.1*max(abs(x))], ...
-'zlim', [-max(max(abs(x)),max(abs(y)))/100,max(max(abs(x)),max(abs(y)))/20]); 
+% z = zeros(length(x),1);
+% phi = zeros(length(psi),1);
+% theta = zeros(length(psi),1);
+% 
+% % create object 1: ship (ship1.mat)
+% new_object('flypath3d_v3/ship1.mat',[x,y,z,phi,theta,psi],...
+% 'model','royalNavy2.mat','scale',(max(max(abs(x)),max(abs(y)))/1000),...
+% 'edge',[0 0 0],'face',[0 0 0],'alpha',1,...
+% 'path','on','pathcolor',[.89 .0 .27],'pathwidth',2);
+% 
+% % Plot trajectories 
+% flypath('flypath3d_v3/ship1.mat',...
+% 'animate','on','step',500,...
+% 'axis','on','axiscolor',[0 0 0],'color',[1 1 1],...
+% 'font','Georgia','fontsize',12,...
+% 'view',[-25 35],'window',[900 900],...
+% 'xlim', [min(y)-0.1*max(abs(y)),max(y)+0.1*max(abs(y))],... 
+% 'ylim', [min(x)-0.1*max(abs(x)),max(x)+0.1*max(abs(x))], ...
+% 'zlim', [-max(max(abs(x)),max(abs(y)))/100,max(max(abs(x)),max(abs(y)))/20]); 
 
 
 %% Problem 1b
@@ -276,3 +277,20 @@ xlabel('Time (s)')
 ylabel('Heading angle (deg)')
 legend('Actual heading', 'Desired heading')
 title('Heading Control')
+
+%% heading plot
+chi = psi + atan2(v, u);
+
+figure
+plot(t, rad2deg(chi), 'LineWidth', 1.5)
+hold on
+plot(t, chi_d_vect, '--', 'LineWidth', 1.5)
+
+grid on
+xlabel('Time (s)')
+ylabel('Course (deg)')
+legend('Actual course', 'Desired course')
+title('Course')
+
+% figure 
+pathplotter(x,y)
