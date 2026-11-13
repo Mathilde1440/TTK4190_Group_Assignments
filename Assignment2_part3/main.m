@@ -13,6 +13,10 @@ clc; clear; close all;clear functions;
 T_final = 6300;	        % Final simulation time (s)
 h = 0.1;                % Sampling time (s)
 
+%Problem 4a - Measurement noise
+sigma_psi = deg2rad(0.5);
+sigma_r = deg2rad(0.1);
+
 psi_ref =-110 * pi/180;  % desired yaw angle (rad)
 U_ref   = 9;            % desired surge speed (m/s)
 
@@ -47,6 +51,8 @@ xk1        = 0;
 yk1        = 0;
 
 
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MAIN LOOP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -55,6 +61,34 @@ nTimeSteps = length(t);         % Number of time steps
 
 simdata = zeros(nTimeSteps, 13); % Pre-allocate matrix for efficiency
 chi_d_vect = zeros(nTimeSteps,1);
+
+psi_meas_vect = zeros(nTimeSteps,1);
+r_meas_vect = zeros(nTimeSteps,1);
+
+% Problem 4b - Kalman filter init
+
+T_nomoto = -99.47;
+K_nomoto = -0.004883;
+
+Ad = [1, h, 0;
+      0, 1-h/T_nomoto, - h*K_nomoto/T_nomoto;
+      0, 0, 1];
+
+Bd = [0;
+      h*K_nomoto/T_nomoto;
+      0];
+
+Cd = [1, 0, 0];
+Ed = [0; 0; h];
+
+x_prd = zeros(3,1);
+
+P_prd = diag([deg2rad(30)^2, deg2rad(1)^2, deg2rad(5)^2]);  %tuning parameter
+
+Rd = deg2rad(1)^2;
+Qd = diag([1e-9, 5e-9, 1e-10]);   %tuning parameter
+
+x_est_vect = zeros(nTimeSteps, 3);
 
 for i = 1:nTimeSteps
     % if t(i) >= 500
@@ -74,6 +108,17 @@ for i = 1:nTimeSteps
     uc = Vc*cos(beta_Vc - psi);
     vc = Vc*sin(beta_Vc - psi);
     nu_c = [ uc vc 0 ]';
+
+    % Add measurement noise to heading and yaw-rate measurements
+    psi_meas = psi + sigma_psi*randn();
+    r_meas = x(3) + sigma_r*randn();
+
+    [x_pst, P_pst, x_prd, P_prd] = KF(x_prd,P_prd,Ad,Bd,Ed,Cd,Qd,Rd,psi_meas,x(7));
+
+    x_est_vect(i,:) = x_pst';
+
+    psi_meas_vect(i) = psi_meas;
+    r_meas_vect(i) = r_meas;
     
     % --------Wind------------- 
     if t(i) >= 200
@@ -103,9 +148,11 @@ for i = 1:nTimeSteps
 
     [xk1,yk1,xk,yk,last] = WP_selector(x(4),x(5));
     [pi_h, y_ep]  = crossTrackError(xk1,yk1,xk,yk,x(4),x(5));
+    
     % chi_d = LOS_guidance(pi_h, y_ep);
     chi_d = ILOS_guidance(pi_h, y_ep,h);
-    psi_ref = chi_d;
+    beta_c_i = atan2(x(2), x(1));
+    psi_ref = chi_d - beta_c_i;
 
     %crab angle compansation
     % beta_c_i = atan2(x(2), x(1));
@@ -131,9 +178,21 @@ for i = 1:nTimeSteps
     % --------Heading controller ----------- 
 
     %delta_c = 0.1;              % rudder angle command (rad)
-    e_psi = psi_d - psi;
-    e_r = r_d - x(3);
+    % e_psi = psi_d - psi;
+    % e_r = r_d - x(3);
     
+    %Problem 4c
+    % e_psi = ssa(psi_meas - psi_d);
+    % e_r = r_meas - r_d;
+
+    %Kalman filter 4d
+    e_psi = ssa(x_pst(1) - psi_d);
+    e_r = x_pst(2) - r_d;
+   
+    e_u = x(1) - u_d;
+
+    %delta_c = PID_heading(e_psi,e_r,e_int);
+    delta_c = PD_heading_KF(e_psi,e_r); %Kalman filter 4b
     % delta_c = PID_heading(e_psi,e_r,e_int);
     delta_c = PD_heading(e_psi,e_r);
 
@@ -294,3 +353,61 @@ title('Course')
 
 % figure 
 pathplotter(x,y)
+
+
+%% Problem 4a - Noisy measurements
+
+figure
+
+subplot(2,1,1)
+plot(t, rad2deg(psi), 'LineWidth', 1.5)
+hold on
+plot(t, rad2deg(psi_meas_vect), 'LineWidth', 0.5)
+grid on
+xlabel('Time (s)')
+ylabel('Yaw angle (deg)')
+legend('True yaw angle', 'Noisy measurement')
+title('Yaw Angle Measurements')
+
+subplot(2,1,2)
+plot(t, rad2deg(r), 'LineWidth', 1.5)
+hold on
+plot(t, rad2deg(r_meas_vect), 'LineWidth', 0.5)
+grid on
+xlabel('Time (s)')
+ylabel('Yaw rate (deg/s)')
+legend('True yaw rate', 'Noisy measurement')
+title('Yaw Rate Measurements')
+
+
+
+%% Problem 4b - Kalman filter results
+
+figure
+
+subplot(3,1,1)
+plot(t,rad2deg(simdata(:,6)),'LineWidth',1.5)
+hold on
+plot(t,rad2deg(x_est_vect(:,1)),'--','LineWidth',1.5)
+ylabel('Yaw angle (deg)')
+legend('True','Estimated')
+title('Yaw angle estimation')
+grid on
+
+subplot(3,1,2)
+plot(t,rad2deg(simdata(:,3)),'LineWidth',1.5)
+hold on
+plot(t,rad2deg(x_est_vect(:,2)),'--','LineWidth',1.5)
+ylabel('Yaw rate (deg/s)')
+legend('True','Estimated')
+title('Yaw rate estimation')
+grid on
+
+subplot(3,1,3)
+plot(t,rad2deg(x_est_vect(:,3)),'LineWidth',1.5)
+ylabel('Rudder bias (deg)')
+xlabel('Time (s)')
+title('Estimated rudder bias')
+grid on
+
+
