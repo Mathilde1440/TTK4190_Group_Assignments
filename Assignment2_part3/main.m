@@ -67,28 +67,77 @@ r_meas_vect = zeros(nTimeSteps,1);
 
 % Problem 4b - Kalman filter init
 
-T_nomoto = -99.47;
-K_nomoto = -0.004883;
+% T_nomoto = -99.47;
+% K_nomoto = -0.004883;
+% 
+% Ad = [1, h, 0;
+%       0, 1-h/T_nomoto, - h*K_nomoto/T_nomoto;
+%       0, 0, 1];
+% 
+% Bd = [0;
+%       h*K_nomoto/T_nomoto;
+%       0];
+% 
+% Cd = [1, 0, 0];
+% Ed = [0; 0; h];
+% 
+% x_prd = zeros(3,1);
+% 
+% P_prd = diag([deg2rad(30)^2, deg2rad(1)^2, deg2rad(5)^2]);  %tuning parameter
+% 
+% Rd = deg2rad(1)^2;
+% Qd = diag([1e-9, 5e-9, 1e-10]);   %tuning parameter
+% 
+% x_est_vect = zeros(nTimeSteps, 3);
 
-Ad = [1, h, 0;
-      0, 1-h/T_nomoto, - h*K_nomoto/T_nomoto;
-      0, 0, 1];
+%Problem 6b
+p_ins = [x(4); x(5); 0];
 
-Bd = [0;
-      h*K_nomoto/T_nomoto;
-      0];
+v_ins = zeros(3,1);
 
-Cd = [1, 0, 0];
-Ed = [0; 0; h];
+b_acc_ins = zeros(3,1);
 
-x_prd = zeros(3,1);
+theta_ins = [0; 0; x(6)];
 
-P_prd = diag([deg2rad(30)^2, deg2rad(1)^2, deg2rad(5)^2]);  %tuning parameter
+b_ars_ins = zeros(3,1);
 
-Rd = deg2rad(1)^2;
-Qd = diag([1e-9, 5e-9, 1e-10]);   %tuning parameter
+x_ins = [p_ins;
+         v_ins;
+         b_acc_ins;
+         theta_ins;
+         b_ars_ins];
 
-x_est_vect = zeros(nTimeSteps, 3);
+P_prd_ESKF = eye(15);
+
+Qd_ESKF = diag([0.1 0.1 0 0.001 0.001 0 0 0 0.1 0 0 0.001]);
+
+Rd_ESKF = diag([0.1 0.1 0.1 1 1 1 0.01]);
+
+T_acc = Inf;
+T_ars = Inf;
+
+sigma_accel = 0.001;
+sigma_gyro = 0.0000175;
+sigma_gps_pos = 0.025;
+sigma_gps_vel = 0.02;
+sigma_compass_psi = deg2rad(0.5);
+
+f_imu = 10;
+f_gps = 5;
+
+mu = deg2rad(63.43);
+
+g = gravity(mu);
+
+h_pos = 1/f_gps;
+t_slow = 0;
+
+x_ins_vect = zeros(nTimeSteps, 15);
+
+r_est_vect = zeros(nTimeSteps, 1);
+
+psi_est = x_ins(12);
+r_est = 0;
 
 for i = 1:nTimeSteps
     % if t(i) >= 500
@@ -113,9 +162,9 @@ for i = 1:nTimeSteps
     psi_meas = psi + sigma_psi*randn();
     r_meas = x(3) + sigma_r*randn();
 
-    [x_pst, P_pst, x_prd, P_prd] = KF(x_prd,P_prd,Ad,Bd,Ed,Cd,Qd,Rd,psi_meas,x(7));
+    %[x_pst, P_pst, x_prd, P_prd] = KF(x_prd,P_prd,Ad,Bd,Ed,Cd,Qd,Rd,psi_meas,x(7));
 
-    x_est_vect(i,:) = x_pst';
+    %x_est_vect(i,:) = x_pst';
 
     psi_meas_vect(i) = psi_meas;
     r_meas_vect(i) = r_meas;
@@ -186,8 +235,17 @@ for i = 1:nTimeSteps
     % e_r = r_meas - r_d;
 
     %Kalman filter 4d
-    e_psi = ssa(x_pst(1) - psi_d);
-    e_r = x_pst(2) - r_d;
+    % e_psi = ssa(x_pst(1) - psi_d);
+    % e_r = x_pst(2) - r_d;
+
+    %problem 6b
+    % e_psi = ssa(x(6) - psi_d);
+    % e_r = x(3) - r_d;
+
+    %problem 6c
+    e_psi = ssa(psi_est - psi_d);
+    e_r = r_est - r_d;
+
    
     e_u = x(1) - u_d;
 
@@ -208,8 +266,48 @@ for i = 1:nTimeSteps
     % ship dynamics
     u = [delta_c n_c]';
     [xdot,tau_total] = ship(x,u,nu_c,tau_wind);
+    w_true = [0; 0; x(3)];
+
+    a_body = [xdot(1) - x(3)*x(2);
+              xdot(2) + x(3)*x(1);
+              0];
+
+
+    f_true = a_body - [0; 0; g];
+
+    f_imu = f_true + sigma_accel*randn(3,1);
+    w_imu = w_true + sigma_gyro*randn(3,1);
+
+    imu_meas = [f_imu; w_imu];
+
+
+    y_psi = ssa(x(6) + sigma_compass_psi*randn());
     
-    % store simulation data in a table (for testing)
+
+    if t(i) >= t_slow
+    
+        y_pos = [x(4); x(5); 0] + sigma_gps_pos*randn(3,1);
+    
+        [x_ins,P_prd_ESKF] = ins_euler( x_ins,P_prd_ESKF,mu,h,Qd_ESKF,Rd_ESKF, T_acc,T_ars,imu_meas,y_psi,y_pos);
+
+        t_slow = t_slow + h_pos;
+    
+    else
+    
+        [x_ins,P_prd_ESKF] = ins_euler( x_ins,P_prd_ESKF,mu,h,Qd_ESKF,Rd_ESKF, T_acc,T_ars,imu_meas,y_psi);
+    
+    end
+
+    
+        
+    x_ins_vect(i,:) = x_ins';
+    
+    psi_est = x_ins(12);
+
+    r_est = w_imu(3) - x_ins(15);
+
+    r_est_vect(i) = r_est;
+    
     simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d];     
  
     % Euler integration
@@ -383,31 +481,129 @@ title('Yaw Rate Measurements')
 
 %% Problem 4b - Kalman filter results
 
+% figure
+% 
+% subplot(3,1,1)
+% plot(t,rad2deg(simdata(:,6)),'LineWidth',1.5)
+% hold on
+% plot(t,rad2deg(x_est_vect(:,1)),'--','LineWidth',1.5)
+% ylabel('Yaw angle (deg)')
+% legend('True','Estimated')
+% title('Yaw angle estimation')
+% grid on
+% 
+% subplot(3,1,2)
+% plot(t,rad2deg(simdata(:,3)),'LineWidth',1.5)
+% hold on
+% plot(t,rad2deg(x_est_vect(:,2)),'--','LineWidth',1.5)
+% ylabel('Yaw rate (deg/s)')
+% legend('True','Estimated')
+% title('Yaw rate estimation')
+% grid on
+% 
+% subplot(3,1,3)
+% plot(t,rad2deg(x_est_vect(:,3)),'LineWidth',1.5)
+% ylabel('Rudder bias (deg)')
+% xlabel('Time (s)')
+% title('Estimated rudder bias')
+% grid on
+
+
+
+
+% ESKF estimates are propagated one time step ahead
+t_eskf = t + h;
+
 figure
 
 subplot(3,1,1)
-plot(t,rad2deg(simdata(:,6)),'LineWidth',1.5)
+plot(t, simdata(:,4), 'LineWidth', 1.5)
 hold on
-plot(t,rad2deg(x_est_vect(:,1)),'--','LineWidth',1.5)
-ylabel('Yaw angle (deg)')
-legend('True','Estimated')
-title('Yaw angle estimation')
+plot(t_eskf, x_ins_vect(:,1), '--', 'LineWidth', 1.5)
 grid on
+ylabel('North (m)')
+legend('True', 'ESKF')
+title('North Position Estimation')
 
 subplot(3,1,2)
-plot(t,rad2deg(simdata(:,3)),'LineWidth',1.5)
+plot(t, simdata(:,5), 'LineWidth', 1.5)
 hold on
-plot(t,rad2deg(x_est_vect(:,2)),'--','LineWidth',1.5)
-ylabel('Yaw rate (deg/s)')
-legend('True','Estimated')
-title('Yaw rate estimation')
+plot(t_eskf, x_ins_vect(:,2), '--', 'LineWidth', 1.5)
 grid on
+ylabel('East (m)')
+legend('True', 'ESKF')
+title('East Position Estimation')
 
 subplot(3,1,3)
-plot(t,rad2deg(x_est_vect(:,3)),'LineWidth',1.5)
-ylabel('Rudder bias (deg)')
-xlabel('Time (s)')
-title('Estimated rudder bias')
+plot(t, rad2deg(simdata(:,6)), 'LineWidth', 1.5)
+hold on
+plot(t_eskf, rad2deg(x_ins_vect(:,12)), '--', 'LineWidth', 1.5)
 grid on
+xlabel('Time (s)')
+ylabel('Yaw angle (deg)')
+legend('True', 'ESKF')
+title('Yaw Angle Estimation')
 
 
+figure
+
+plot(simdata(:,5), simdata(:,4), 'LineWidth', 1.5)
+hold on
+plot(x_ins_vect(:,2), x_ins_vect(:,1), '--', 'LineWidth', 1.5)
+
+grid on
+axis equal
+
+xlabel('East (m)')
+ylabel('North (m)')
+legend('True trajectory', 'ESKF trajectory')
+title('ESKF Position Estimation')
+
+%% Problem 6b - ESKF estimation errors
+
+% Align true states with ESKF predictions
+t_error = t(2:end);
+
+% Position errors
+error_north = simdata(2:end,4) - x_ins_vect(1:end-1,1);
+error_east = simdata(2:end,5) - x_ins_vect(1:end-1,2);
+
+% Yaw angle error
+error_yaw = rad2deg(ssa( ...
+    simdata(2:end,6) - x_ins_vect(1:end-1,12)));
+
+% Plot estimation errors
+figure
+
+subplot(3,1,1)
+plot(t_error, error_north)
+grid on
+ylabel('Error (m)')
+title('North Position Estimation Error')
+
+subplot(3,1,2)
+plot(t_error, error_east)
+grid on
+ylabel('Error (m)')
+title('East Position Estimation Error')
+
+subplot(3,1,3)
+plot(t_error, error_yaw)
+grid on
+xlabel('Time (s)')
+ylabel('Error (deg)')
+title('Yaw Angle Estimation Error')
+
+%% Problem 6b - RMSE
+
+RMSE_north = sqrt(mean(error_north.^2));
+RMSE_east = sqrt(mean(error_east.^2));
+RMSE_yaw = sqrt(mean(error_yaw.^2));
+
+fprintf('North position RMSE: %.4f m\n', RMSE_north);
+fprintf('East position RMSE: %.4f m\n', RMSE_east);
+fprintf('Yaw angle RMSE: %.4f deg\n', RMSE_yaw);
+
+%% Problem 6b - Save simulation results
+
+save('simdata_ESKF_6c.mat', 'simdata', 'x_ins_vect', 't')
