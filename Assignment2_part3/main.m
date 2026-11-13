@@ -193,6 +193,8 @@ for i = 1:nTimeSteps
 
     %delta_c = PID_heading(e_psi,e_r,e_int);
     delta_c = PD_heading_KF(e_psi,e_r); %Kalman filter 4b
+    % delta_c = PID_heading(e_psi,e_r,e_int);
+    delta_c = PD_heading(e_psi,e_r);
 
     e_int = e_int + h*e_psi;
 
@@ -336,7 +338,7 @@ legend('Actual heading', 'Desired heading')
 title('Heading Control')
 
 %% heading plot
-chi = psi + atan2(v, u);
+chi = psi + atan2(v-vc, u-uc);
 
 figure
 plot(t, rad2deg(chi), 'LineWidth', 1.5)
