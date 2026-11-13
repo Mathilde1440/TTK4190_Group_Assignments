@@ -134,7 +134,7 @@ for i = 1:nTimeSteps
     e_psi = psi_d - psi;
     e_r = r_d - x(3);
     
-    %delta_c = PID_heading(e_psi,e_r,e_int);
+    % delta_c = PID_heading(e_psi,e_r,e_int);
     delta_c = PD_heading(e_psi,e_r);
 
     e_int = e_int + h*e_psi;
@@ -279,7 +279,7 @@ legend('Actual heading', 'Desired heading')
 title('Heading Control')
 
 %% heading plot
-chi = psi + atan2(v, u);
+chi = psi + atan2(v-vc, u-uc);
 
 figure
 plot(t, rad2deg(chi), 'LineWidth', 1.5)
